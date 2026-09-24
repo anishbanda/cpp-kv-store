@@ -91,10 +91,10 @@ documentation. Check an item only after verifying it.
 
 ## Milestone 10 — Portfolio Release
 
-- [ ] Complete README usage, design, limitations, and benchmark sections.
-- [ ] Add an architecture diagram and a reproducible demo.
-- [ ] Verify `redis-cli` compatibility for supported commands.
-- [ ] Tag `v1.0.0` only after all acceptance criteria pass.
+- [x] Complete README usage, design, limitations, and benchmark sections.
+- [x] Add an architecture diagram and a reproducible demo (`scripts/demo.sh`).
+- [x] Verify `redis-cli` compatibility for supported commands.
+- [x] Tag `v1.0.0` only after all acceptance criteria pass.
 
 ## Version 2 Backlog
 
