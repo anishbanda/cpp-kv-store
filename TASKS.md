@@ -1,0 +1,104 @@
+# Implementation Plan
+
+Complete milestones in order. Every milestone ends with a clean build, passing tests, and updated
+documentation. Check an item only after verifying it.
+
+## Milestone 0 — Repository and Toolchain
+
+- [x] Create repository layout, CMake build, Docker environment, and presets.
+- [x] Add warning and sanitizer configuration.
+- [x] Add a starter executable and GoogleTest smoke test.
+- [x] Add specification, architecture, protocol, concurrency, and agent instructions.
+- [x] Add a Linux CI workflow.
+- [x] Verify debug, release, ASan/UBSan, and TSan starter builds on the development Mac.
+
+## Milestone 1 — Thread-Safe Storage Engine
+
+- [x] Define storage interface and command-independent result types.
+- [x] Implement configurable sharded map with `std::shared_mutex`.
+- [x] Implement `set`, `get`, `del`, `exists`, `expire`, and `ttl` semantics.
+- [x] Use monotonic deadlines and entry generations.
+- [x] Add deterministic clock injection for TTL tests.
+- [x] Test replacement, missing keys, immediate expiry, and shard concurrency.
+- [x] Pass debug, ASan/UBSan, and TSan tests.
+
+## Milestone 2 — RESP Parser and Serializer
+
+- [x] Define owned command representation.
+- [x] Implement incremental RESP2 array/bulk-string parser.
+- [x] Validate arity, integer arguments, and size limits.
+- [x] Serialize simple strings, errors, integers, bulk strings, and null bulk strings.
+- [x] Test every split point of representative frames and multiple pipelined frames.
+- [x] Fuzz or property-test malformed lengths and truncated input.
+
+## Milestone 3 — TCP Server Foundation
+
+- [ ] Add RAII wrappers for file descriptors.
+- [ ] Create configurable nonblocking listener.
+- [ ] Accept, register, and close clients safely.
+- [ ] Add connection IDs/generations and bounded buffers.
+- [ ] Test connect/disconnect and basic request/response on loopback.
+
+## Milestone 4 — `epoll` Event Loop
+
+- [ ] Implement edge- or level-triggered behavior with one documented choice.
+- [ ] Handle partial reads/writes and `EAGAIN` correctly.
+- [ ] Parse multiple commands per read.
+- [ ] Add event-loop wakeup for completions and shutdown.
+- [ ] Test fragmented and pipelined requests.
+
+## Milestone 5 — Worker Pool and Dispatch
+
+- [ ] Implement bounded blocking work and completion queues.
+- [ ] Implement fixed-size `std::jthread` pool.
+- [ ] Dispatch all seven commands to storage.
+- [ ] Preserve response order per connection.
+- [ ] Apply input/output backpressure and in-flight limits.
+- [ ] Test queue closure and out-of-order worker completion.
+
+## Milestone 6 — Active TTL Expiration
+
+- [ ] Implement bounded background or event-loop cleanup.
+- [ ] Ignore stale expiration records using generation checks.
+- [ ] Test expiration/replacement races with an injectable clock.
+- [ ] Record expiration counters for later metrics.
+
+## Milestone 7 — Reliability and Stress Tests
+
+- [ ] Add 1,000-connection integration test.
+- [ ] Add randomized concurrent operation test with a reference model.
+- [ ] Add graceful shutdown tests with active clients.
+- [ ] Run full ASan/UBSan suite.
+- [ ] Run TSan concurrency suite with zero known project races.
+- [ ] Document any environment-specific sanitizer limitations accurately.
+
+## Milestone 8 — Benchmarking
+
+- [ ] Implement benchmark client or integrate a suitable open tool.
+- [ ] Report throughput, p50, p95, and p99 latency.
+- [ ] Run the workload matrix in `benchmarks/README.md`.
+- [ ] Record full environment and methodology.
+- [ ] Save raw results separately from summarized results.
+
+## Milestone 9 — Profiling and Optimization
+
+- [ ] Profile a release build before changing code.
+- [ ] Identify measured hot paths and contention.
+- [ ] Optimize only evidence-backed bottlenecks.
+- [ ] Re-run correctness, sanitizer, and benchmark suites.
+- [ ] Compare before/after results without hiding regressions.
+
+## Milestone 10 — Portfolio Release
+
+- [ ] Complete README usage, design, limitations, and benchmark sections.
+- [ ] Add an architecture diagram and a reproducible demo.
+- [ ] Verify `redis-cli` compatibility for supported commands.
+- [ ] Tag `v1.0.0` only after all acceptance criteria pass.
+
+## Version 2 Backlog
+
+- Append-only persistence and recovery
+- Snapshotting
+- LRU/LFU eviction and memory limits
+- Authentication or TLS via a proven external library
+- Additional RESP commands
