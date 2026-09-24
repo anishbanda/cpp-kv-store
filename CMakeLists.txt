@@ -60,6 +60,13 @@ target_link_libraries(kvstore_server PRIVATE kvstore_core)
 kvstore_set_project_warnings(kvstore_server)
 kvstore_enable_sanitizers(kvstore_server)
 
+# Deliberately not linked against kvstore_core: it is an external-style
+# client speaking RESP2 over a socket, exercising the server the same way
+# any other client would (see benchmarks/client/kv_bench.cpp).
+add_executable(kvstore_bench benchmarks/client/kv_bench.cpp)
+target_link_libraries(kvstore_bench PRIVATE Threads::Threads)
+kvstore_set_project_warnings(kvstore_bench)
+
 if(KVSTORE_BUILD_TESTS)
   include(CTest)
   enable_testing()

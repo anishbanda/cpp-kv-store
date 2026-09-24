@@ -74,11 +74,12 @@ documentation. Check an item only after verifying it.
 
 ## Milestone 8 — Benchmarking
 
-- [ ] Implement benchmark client or integrate a suitable open tool.
-- [ ] Report throughput, p50, p95, and p99 latency.
-- [ ] Run the workload matrix in `benchmarks/README.md`.
-- [ ] Record full environment and methodology.
-- [ ] Save raw results separately from summarized results.
+- [x] Implement benchmark client or integrate a suitable open tool.
+- [x] Report throughput, p50, p95, and p99 latency.
+- [x] Run the workload matrix in `benchmarks/README.md` (representative subset; see
+      `benchmarks/results/summary.md` for exactly what was and wasn't run, and why).
+- [x] Record full environment and methodology.
+- [x] Save raw results separately from summarized results.
 
 ## Milestone 9 — Profiling and Optimization
 
