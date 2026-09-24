@@ -8,4 +8,5 @@ compile_commands.json
 *.log
 *.profraw
 *.profdata
+.profile_tmp/
 

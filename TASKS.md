@@ -83,11 +83,11 @@ documentation. Check an item only after verifying it.
 
 ## Milestone 9 — Profiling and Optimization
 
-- [ ] Profile a release build before changing code.
-- [ ] Identify measured hot paths and contention.
-- [ ] Optimize only evidence-backed bottlenecks.
-- [ ] Re-run correctness, sanitizer, and benchmark suites.
-- [ ] Compare before/after results without hiding regressions.
+- [x] Profile a release build before changing code.
+- [x] Identify measured hot paths and contention.
+- [x] Optimize only evidence-backed bottlenecks (see `benchmarks/results/milestone9_profiling.md`).
+- [x] Re-run correctness, sanitizer, and benchmark suites.
+- [x] Compare before/after results without hiding regressions.
 
 ## Milestone 10 — Portfolio Release
 

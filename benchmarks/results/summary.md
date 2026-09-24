@@ -1,5 +1,11 @@
 # Benchmark Summary
 
+**This is the Milestone 8 baseline, captured before Milestone 9's profiling-driven
+optimization.** `benchmarks/raw/results.csv` has since been overwritten by that milestone's
+post-optimization re-run; the exact before/after data (both preserved separately) and the
+optimization itself are in `benchmarks/results/milestone9_profiling.md`. The methodology and
+environment described below are otherwise unchanged and still apply to the current results.
+
 **Do not treat these as bare-metal Linux numbers.** Everything below ran inside a single Docker
 Desktop container on a MacBook (Apple Silicon host, `arm64` container), with the benchmark client
 and the server sharing the same container and CPU cores. They are valid development-environment
