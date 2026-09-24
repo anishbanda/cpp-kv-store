@@ -30,6 +30,12 @@ add_library(kvstore_core STATIC
   src/storage/store.cpp
   src/protocol/parser.cpp
   src/protocol/serializer.cpp
+  src/net/file_descriptor.cpp
+  src/net/bounded_buffer.cpp
+  src/net/connection.cpp
+  src/net/connection_registry.cpp
+  src/net/io.cpp
+  src/net/listener.cpp
 )
 
 target_include_directories(kvstore_core
@@ -57,6 +63,11 @@ if(KVSTORE_BUILD_TESTS)
     tests/storage/store_test.cpp
     tests/protocol/parser_test.cpp
     tests/protocol/serializer_test.cpp
+    tests/net/file_descriptor_test.cpp
+    tests/net/bounded_buffer_test.cpp
+    tests/net/io_test.cpp
+    tests/net/connection_registry_test.cpp
+    tests/net/listener_test.cpp
   )
   target_link_libraries(kvstore_tests PRIVATE kvstore_core GTest::gtest_main)
   kvstore_set_project_warnings(kvstore_tests)

@@ -33,11 +33,11 @@ documentation. Check an item only after verifying it.
 
 ## Milestone 3 — TCP Server Foundation
 
-- [ ] Add RAII wrappers for file descriptors.
-- [ ] Create configurable nonblocking listener.
-- [ ] Accept, register, and close clients safely.
-- [ ] Add connection IDs/generations and bounded buffers.
-- [ ] Test connect/disconnect and basic request/response on loopback.
+- [x] Add RAII wrappers for file descriptors.
+- [x] Create configurable nonblocking listener.
+- [x] Accept, register, and close clients safely.
+- [x] Add connection IDs/generations and bounded buffers.
+- [x] Test connect/disconnect and basic request/response on loopback.
 
 ## Milestone 4 — `epoll` Event Loop
 
