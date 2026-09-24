@@ -65,12 +65,12 @@ documentation. Check an item only after verifying it.
 
 ## Milestone 7 — Reliability and Stress Tests
 
-- [ ] Add 1,000-connection integration test.
-- [ ] Add randomized concurrent operation test with a reference model.
-- [ ] Add graceful shutdown tests with active clients.
-- [ ] Run full ASan/UBSan suite.
-- [ ] Run TSan concurrency suite with zero known project races.
-- [ ] Document any environment-specific sanitizer limitations accurately.
+- [x] Add 1,000-connection integration test.
+- [x] Add randomized concurrent operation test with a reference model.
+- [x] Add graceful shutdown tests with active clients.
+- [x] Run full ASan/UBSan suite.
+- [x] Run TSan concurrency suite with zero known project races.
+- [x] Document any environment-specific sanitizer limitations accurately.
 
 ## Milestone 8 — Benchmarking
 

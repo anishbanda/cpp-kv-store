@@ -123,6 +123,25 @@ docker compose down
 The bind mount `.:/workspace` means code edited on your Mac is immediately visible inside the
 container. Containers are disposable; your source remains in the Mac project folder.
 
+## Sanitizer Environment Notes
+
+Verified through Milestone 7 on Docker Desktop for Apple Silicon (Ubuntu 24.04 container, `arm64`,
+Clang 18.1.3):
+
+- The base `clang` package does **not** ship the sanitizer runtimes on this platform; ASan/UBSan
+  failed to link (`cannot find libclang_rt.asan-aarch64.a`) until `libclang-rt-18-dev` was added to
+  `Dockerfile`. If you rebuild the image from scratch and hit that link error, this is why.
+- With that package present, `./scripts/test.sh asan` (ASan+UBSan) and `./scripts/test.sh tsan` both
+  run cleanly end to end. Every milestone's test suite (172+ cases as of Milestone 6, including the
+  concurrency-heavy storage, worker pool, and event loop tests) has passed under both with zero
+  known project errors or data races.
+- `cmake/Sanitizers.cmake` refuses a build that enables TSan together with ASan/UBSan in the same
+  binary (they are not composable); the two are always run as separate `ctest` presets, per
+  `CMakePresets.json`.
+- No other environment-specific sanitizer limitations have been found on this platform. Benchmark
+  numbers gathered under Docker Desktop are still not bare-metal results -- see "Important Benchmark
+  Note" below -- but this does not affect sanitizer correctness, only timing.
+
 ## Docker Desktop Settings
 
 Defaults are usually sufficient. A practical starting point is 4 CPU cores and 4–6 GB of memory,

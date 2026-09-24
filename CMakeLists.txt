@@ -79,6 +79,9 @@ if(KVSTORE_BUILD_TESTS)
     tests/worker/bounded_queue_test.cpp
     tests/worker/worker_pool_test.cpp
     tests/command/dispatcher_test.cpp
+    tests/reliability/thousand_connections_test.cpp
+    tests/reliability/randomized_concurrency_test.cpp
+    tests/reliability/graceful_shutdown_test.cpp
   )
   target_link_libraries(kvstore_tests PRIVATE kvstore_core GTest::gtest_main)
   kvstore_set_project_warnings(kvstore_tests)
