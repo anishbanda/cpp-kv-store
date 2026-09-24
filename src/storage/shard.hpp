@@ -4,10 +4,12 @@
 #include <cstdint>
 #include <functional>
 #include <optional>
+#include <queue>
 #include <shared_mutex>
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <vector>
 
 #include "kvstore/storage/clock.hpp"
 
@@ -37,14 +39,39 @@ struct Entry {
   std::uint64_t generation = 0;
 };
 
-// One shard: an independent lock plus the key/value map it guards. Reads
-// take a shared lock; writes, deletes, and lazy-expiration cleanup take an
-// exclusive lock. Never hold `mutex` while blocking on a queue, doing I/O,
-// logging a payload, or sleeping.
+// A candidate for active expiration: captures a key's deadline and
+// generation at the moment expire() scheduled it. The active sweep
+// (Milestone 6) must delete the entry only if its live deadline and
+// generation still match this snapshot -- otherwise the key was replaced
+// or re-expired since, and deleting it would drop a newer value (see
+// docs/CONCURRENCY.md, "TTL Races").
+struct ExpirationCandidate {
+  TimePoint deadline;
+  std::uint64_t generation;
+  std::string key;
+};
+
+// Orders a min-heap on `deadline` (soonest first): std::priority_queue is
+// a max-heap by default, so this comparator is inverted.
+struct ExpirationCandidateOrder {
+  [[nodiscard]] bool operator()(const ExpirationCandidate& a,
+                                const ExpirationCandidate& b) const noexcept {
+    return a.deadline > b.deadline;
+  }
+};
+
+// One shard: an independent lock plus the key/value map it guards, plus a
+// heap of expiration candidates for the active sweep to consult. Reads
+// take a shared lock; writes, deletes, and expiration cleanup (lazy or
+// active) take an exclusive lock. Never hold `mutex` while blocking on a
+// queue, doing I/O, logging a payload, or sleeping.
 struct Shard {
   mutable std::shared_mutex mutex;
   std::unordered_map<std::string, Entry, TransparentStringHash, std::equal_to<>> entries;
   std::uint64_t next_generation = 0;
+  std::priority_queue<ExpirationCandidate, std::vector<ExpirationCandidate>,
+                      ExpirationCandidateOrder>
+      expiration_heap;
 };
 
 [[nodiscard]] inline bool is_expired(const Entry& entry, TimePoint now) noexcept {

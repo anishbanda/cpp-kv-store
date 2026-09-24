@@ -141,9 +141,48 @@ bool Store::expire(std::string_view key, std::chrono::seconds ttl_seconds) {
     shard.entries.erase(it);
     return false;
   }
-  it->second.deadline = now + ttl_seconds;
+  const TimePoint deadline = now + ttl_seconds;
+  it->second.deadline = deadline;
   it->second.generation = ++shard.next_generation;
+  shard.expiration_heap.push(detail::ExpirationCandidate{
+      .deadline = deadline, .generation = it->second.generation, .key = std::string(key)});
   return true;
+}
+
+std::size_t Store::sweep_expired(std::size_t max_items_per_shard) {
+  std::size_t total_removed = 0;
+  const TimePoint now = clock_.now();
+
+  for (const std::unique_ptr<detail::Shard>& shard_ptr : shards_) {
+    detail::Shard& shard = *shard_ptr;
+    std::unique_lock lock(shard.mutex);
+
+    std::size_t processed = 0;
+    while (processed < max_items_per_shard && !shard.expiration_heap.empty()) {
+      const detail::ExpirationCandidate& candidate = shard.expiration_heap.top();
+      if (candidate.deadline > now) {
+        break;  // heap is ordered soonest-first; nothing else is due yet
+      }
+
+      auto it = shard.entries.find(candidate.key);
+      if (it != shard.entries.end() && it->second.generation == candidate.generation &&
+          it->second.deadline.has_value() && *it->second.deadline == candidate.deadline) {
+        shard.entries.erase(it);
+        ++total_removed;
+      }
+      shard.expiration_heap.pop();
+      ++processed;
+    }
+  }
+
+  if (total_removed > 0) {
+    active_expirations_.fetch_add(total_removed, std::memory_order_relaxed);
+  }
+  return total_removed;
+}
+
+std::uint64_t Store::active_expiration_count() const noexcept {
+  return active_expirations_.load(std::memory_order_relaxed);
 }
 
 }  // namespace kvstore::storage

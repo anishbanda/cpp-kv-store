@@ -4,6 +4,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <thread>
@@ -132,6 +133,87 @@ TEST_F(StoreTest, TtlRoundsDownToWholeSecondsRemaining) {
   EXPECT_EQ(result.status, TtlResult::Status::kHasTtl);
   ASSERT_TRUE(result.remaining.has_value());
   EXPECT_EQ(result.remaining->count(), 5);
+}
+
+// --- Active expiration (Milestone 6) ------------------------------------------
+
+TEST_F(StoreTest, SweepExpiredRemovesNothingBeforeTheDeadline) {
+  store_.set("k", "v1");
+  ASSERT_TRUE(store_.expire("k", std::chrono::seconds{10}));
+
+  EXPECT_EQ(store_.sweep_expired(/*max_items_per_shard=*/16), 0u);
+  EXPECT_EQ(store_.active_expiration_count(), 0u);
+  EXPECT_EQ(store_.get("k"), "v1");
+}
+
+TEST_F(StoreTest, SweepExpiredRemovesAKeyPastItsDeadline) {
+  store_.set("k", "v1");
+  ASSERT_TRUE(store_.expire("k", std::chrono::seconds{5}));
+  clock_.advance(std::chrono::seconds{5});
+
+  EXPECT_EQ(store_.sweep_expired(/*max_items_per_shard=*/16), 1u);
+  EXPECT_EQ(store_.active_expiration_count(), 1u);
+
+  // Removed without ever being accessed via get()/exists() -- proves
+  // active, not lazy, expiration did this.
+}
+
+TEST_F(StoreTest, SweepExpiredIgnoresAKeyThatWasReplacedBeforeTheSweep) {
+  store_.set("k", "v1");
+  ASSERT_TRUE(store_.expire("k", std::chrono::seconds{5}));
+  clock_.advance(std::chrono::seconds{5});
+
+  // Replacing the key bumps its generation, invalidating the scheduled
+  // expiration candidate (docs/CONCURRENCY.md, "TTL Races").
+  store_.set("k", "v2");
+
+  EXPECT_EQ(store_.sweep_expired(/*max_items_per_shard=*/16), 0u);
+  EXPECT_EQ(store_.active_expiration_count(), 0u);
+  EXPECT_EQ(store_.get("k"), "v2");
+}
+
+TEST_F(StoreTest, SweepExpiredIgnoresAKeyThatWasReExpiredWithALaterDeadline) {
+  store_.set("k", "v1");
+  ASSERT_TRUE(store_.expire("k", std::chrono::seconds{1}));    // stale candidate, due first
+  ASSERT_TRUE(store_.expire("k", std::chrono::seconds{100}));  // supersedes it
+
+  clock_.advance(std::chrono::seconds{1});  // the stale candidate's deadline has passed
+
+  EXPECT_EQ(store_.sweep_expired(/*max_items_per_shard=*/16), 0u);
+  EXPECT_EQ(store_.get("k"), "v1");
+  EXPECT_EQ(store_.ttl("k").status, TtlResult::Status::kHasTtl);
+}
+
+TEST_F(StoreTest, SweepExpiredIgnoresAKeyThatWasDeletedBeforeTheSweep) {
+  store_.set("k", "v1");
+  ASSERT_TRUE(store_.expire("k", std::chrono::seconds{5}));
+  clock_.advance(std::chrono::seconds{5});
+
+  ASSERT_FALSE(store_.del("k"));  // already lazily-expired from del()'s own point of view
+
+  EXPECT_EQ(store_.sweep_expired(/*max_items_per_shard=*/16), 0u);
+  EXPECT_EQ(store_.active_expiration_count(), 0u);
+}
+
+TEST_F(StoreTest, SweepExpiredHonorsThePerShardBatchLimit) {
+  // A single-shard store puts every key's expiration candidate in the same
+  // heap, making the per-call cap directly observable.
+  FakeClock clock;
+  Store store(StoreOptions{.shard_count = 1}, clock);
+
+  constexpr int kKeys = 10;
+  for (int i = 0; i < kKeys; ++i) {
+    const std::string key = "k" + std::to_string(i);
+    store.set(key, "v");
+    ASSERT_TRUE(store.expire(key, std::chrono::seconds{1}));
+  }
+  clock.advance(std::chrono::seconds{1});
+
+  EXPECT_EQ(store.sweep_expired(/*max_items_per_shard=*/4), 4u);
+  EXPECT_EQ(store.sweep_expired(/*max_items_per_shard=*/4), 4u);
+  EXPECT_EQ(store.sweep_expired(/*max_items_per_shard=*/4), 2u);
+  EXPECT_EQ(store.sweep_expired(/*max_items_per_shard=*/4), 0u);
+  EXPECT_EQ(store.active_expiration_count(), static_cast<std::uint64_t>(kKeys));
 }
 
 // --- Size / configuration boundaries -----------------------------------------
@@ -294,6 +376,56 @@ TEST(StoreConcurrencyTest, DeletionRacesWithGetAndTtlWithoutCrashing) {
   // this also confirms the store did not end up in a stuck/locked state.
   store.set("k", "final");
   EXPECT_EQ(store.get("k"), "final");
+}
+
+// Milestone 6: a background sweep thread races real writer threads that
+// repeatedly expire and then replace their own keys. The clock stays
+// frozen throughout (safe to read concurrently; only advance() would
+// race), so every "expire" below is already due the instant it is set.
+// Each key's very last write clears its TTL, so once all writers finish,
+// the sweeper must never have deleted any of them -- proving the
+// generation check holds under real concurrency, not just in the
+// single-threaded tests above.
+TEST(StoreConcurrencyTest, ActiveSweepDoesNotRemoveKeysReplacedDuringARace) {
+  FakeClock clock;
+  Store store(StoreOptions{.shard_count = 8}, clock);
+
+  constexpr int kWriterThreads = 4;
+  constexpr int kKeysPerThread = 25;
+  constexpr int kIterationsPerKey = 20;
+
+  std::atomic<bool> stop_sweeping{false};
+  std::thread sweeper([&] {
+    while (!stop_sweeping.load(std::memory_order_relaxed)) {
+      (void)store.sweep_expired(16);
+    }
+  });
+
+  std::vector<std::thread> writers;
+  for (int t = 0; t < kWriterThreads; ++t) {
+    writers.emplace_back([&store, t] {
+      for (int k = 0; k < kKeysPerThread; ++k) {
+        const std::string key = "t" + std::to_string(t) + "-" + std::to_string(k);
+        for (int iter = 0; iter < kIterationsPerKey; ++iter) {
+          store.set(key, "temp");
+          [[maybe_unused]] const bool expired = store.expire(key, std::chrono::seconds{0});
+        }
+        store.set(key, "final");  // clears the TTL; nothing touches this key again
+      }
+    });
+  }
+  for (std::thread& writer : writers) {
+    writer.join();
+  }
+  stop_sweeping.store(true, std::memory_order_relaxed);
+  sweeper.join();
+
+  for (int t = 0; t < kWriterThreads; ++t) {
+    for (int k = 0; k < kKeysPerThread; ++k) {
+      const std::string key = "t" + std::to_string(t) + "-" + std::to_string(k);
+      EXPECT_EQ(store.get(key), "final") << "key=" << key;
+    }
+  }
 }
 
 }  // namespace

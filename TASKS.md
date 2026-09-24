@@ -58,10 +58,10 @@ documentation. Check an item only after verifying it.
 
 ## Milestone 6 — Active TTL Expiration
 
-- [ ] Implement bounded background or event-loop cleanup.
-- [ ] Ignore stale expiration records using generation checks.
-- [ ] Test expiration/replacement races with an injectable clock.
-- [ ] Record expiration counters for later metrics.
+- [x] Implement bounded background or event-loop cleanup.
+- [x] Ignore stale expiration records using generation checks.
+- [x] Test expiration/replacement races with an injectable clock.
+- [x] Record expiration counters for later metrics.
 
 ## Milestone 7 — Reliability and Stress Tests
 

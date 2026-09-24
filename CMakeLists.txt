@@ -28,6 +28,7 @@ add_library(kvstore_core STATIC
   src/version.cpp
   src/storage/clock.cpp
   src/storage/store.cpp
+  src/storage/ttl_sweeper.cpp
   src/protocol/parser.cpp
   src/protocol/serializer.cpp
   src/net/file_descriptor.cpp
@@ -65,6 +66,7 @@ if(KVSTORE_BUILD_TESTS)
   add_executable(kvstore_tests
     tests/smoke_test.cpp
     tests/storage/store_test.cpp
+    tests/storage/ttl_sweeper_test.cpp
     tests/protocol/parser_test.cpp
     tests/protocol/serializer_test.cpp
     tests/net/file_descriptor_test.cpp
