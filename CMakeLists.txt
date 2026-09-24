@@ -37,6 +37,9 @@ add_library(kvstore_core STATIC
   src/net/io.cpp
   src/net/listener.cpp
   src/net/event_loop.cpp
+  src/net/response_sequencer.cpp
+  src/command/dispatcher.cpp
+  src/worker/worker_pool.cpp
 )
 
 target_include_directories(kvstore_core
@@ -70,6 +73,10 @@ if(KVSTORE_BUILD_TESTS)
     tests/net/connection_registry_test.cpp
     tests/net/listener_test.cpp
     tests/net/event_loop_test.cpp
+    tests/net/response_sequencer_test.cpp
+    tests/worker/bounded_queue_test.cpp
+    tests/worker/worker_pool_test.cpp
+    tests/command/dispatcher_test.cpp
   )
   target_link_libraries(kvstore_tests PRIVATE kvstore_core GTest::gtest_main)
   kvstore_set_project_warnings(kvstore_tests)

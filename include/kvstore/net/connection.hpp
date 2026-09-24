@@ -5,17 +5,11 @@
 #include <string>
 
 #include "kvstore/net/bounded_buffer.hpp"
+#include "kvstore/net/connection_id.hpp"
 #include "kvstore/net/file_descriptor.hpp"
+#include "kvstore/net/response_sequencer.hpp"
 
 namespace kvstore::net {
-
-// A connection's id is its accepted socket's fd number. The OS reuses fd
-// numbers once closed, so id alone cannot tell two different clients
-// apart over time; `generation` (monotonically increasing, assigned by
-// ConnectionRegistry) disambiguates a stale reference to a reused id. See
-// ARCHITECTURE.md, "Data Ownership".
-using ConnectionId = int;
-using ConnectionGeneration = std::uint64_t;
 
 // Default per-connection buffer caps (SPEC.md section 5, Networking
 // Requirements: "Cap each connection's unread input buffer at 2 MiB").
@@ -50,6 +44,8 @@ class Connection {
   [[nodiscard]] BoundedBuffer& output() noexcept { return output_; }
   [[nodiscard]] const BoundedBuffer& output() const noexcept { return output_; }
 
+  [[nodiscard]] ResponseSequencer& sequencer() noexcept { return sequencer_; }
+
  private:
   ConnectionId id_;
   ConnectionGeneration generation_;
@@ -57,6 +53,7 @@ class Connection {
   std::string peer_address_;
   BoundedBuffer input_;
   BoundedBuffer output_;
+  ResponseSequencer sequencer_;
 };
 
 }  // namespace kvstore::net

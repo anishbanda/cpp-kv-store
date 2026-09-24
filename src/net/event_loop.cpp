@@ -36,12 +36,14 @@ void epoll_add(int epoll_fd, int fd, std::uint32_t events) {
 
 }  // namespace
 
-EventLoop::EventLoop(EventLoopConfig config, CommandHandler handler)
+EventLoop::EventLoop(EventLoopConfig config, worker::BoundedQueue<worker::WorkItem>& work_queue,
+                     worker::BoundedQueue<worker::Completion>& completion_queue)
     : config_(std::move(config)),
-      handler_(std::move(handler)),
       listener_(config_.listener),
       epoll_fd_(::epoll_create1(EPOLL_CLOEXEC)),
-      wakeup_fd_(::eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC)) {
+      wakeup_fd_(::eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC)),
+      work_queue_(work_queue),
+      completion_queue_(completion_queue) {
   if (!epoll_fd_.valid()) {
     throw_errno("EventLoop: epoll_create1() failed");
   }
@@ -50,16 +52,32 @@ EventLoop::EventLoop(EventLoopConfig config, CommandHandler handler)
   }
   epoll_add(epoll_fd_.get(), listener_.fd(), EPOLLIN);
   epoll_add(epoll_fd_.get(), wakeup_fd_.get(), EPOLLIN);
+
+  // Let a worker posting a completion wake a blocked epoll_wait, the same
+  // way stop() does, via the same eventfd (ARCHITECTURE.md's "bounded
+  // result queue" arrow back into the event loop).
+  completion_queue_.set_on_push([this] { wake(); });
 }
 
-EventLoop::~EventLoop() = default;
+EventLoop::~EventLoop() {
+  // The constructor registered a callback on `completion_queue_` that
+  // captures `this`. A WorkerPool sharing that queue may outlive (or be
+  // destroyed concurrently with) this EventLoop, and its worker threads
+  // could still call push() after this point; clearing the callback first
+  // makes that harmless (a no-op) instead of a use-after-free.
+  completion_queue_.set_on_push(nullptr);
+}
+
+void EventLoop::wake() {
+  constexpr std::uint64_t kOne = 1;
+  // Best-effort: if this fails the loop is already exiting or the fd is
+  // gone, either way nothing further to do from here.
+  (void)::write(wakeup_fd_.get(), &kOne, sizeof(kOne));
+}
 
 void EventLoop::stop() {
   stop_requested_.store(true, std::memory_order_release);
-  constexpr std::uint64_t kOne = 1;
-  // Best-effort: if this fails the loop is already exiting or the fd is
-  // gone, either way nothing further to do from a shutdown call.
-  (void)::write(wakeup_fd_.get(), &kOne, sizeof(kOne));
+  wake();
 }
 
 void EventLoop::drain_wakeup() {
@@ -68,6 +86,7 @@ void EventLoop::drain_wakeup() {
     // An eventfd counter can in principle require more than one read to
     // fully drain if writes raced with reads; loop until EAGAIN.
   }
+  drain_completions();
 }
 
 void EventLoop::run() {
@@ -170,8 +189,26 @@ void EventLoop::handle_connection_readable(ConnectionId id) {
   handle_connection_writable(id);
 }
 
+bool EventLoop::push_responses(Connection& connection, std::vector<std::string> ready) {
+  for (std::string& response : ready) {
+    if (!connection.output().append(response)) {
+      return false;  // output backpressure: cap exceeded (SPEC.md section 5)
+    }
+  }
+  return true;
+}
+
 bool EventLoop::process_input(Connection& connection) {
   for (;;) {
+    if (connection.sequencer().in_flight_count() >= config_.max_in_flight_per_connection) {
+      // Per-connection backpressure: stop parsing further frames from
+      // this connection's buffer until an earlier response is released
+      // (ARCHITECTURE.md section 4). Already-buffered bytes are left
+      // untouched and retried the next time a completion for this
+      // connection is processed (see drain_completions()).
+      return true;
+    }
+
     const protocol::ParseResult result = protocol::parse_command(connection.input().view());
 
     if (std::holds_alternative<protocol::NeedMoreData>(result)) {
@@ -180,25 +217,48 @@ bool EventLoop::process_input(Connection& connection) {
 
     if (std::holds_alternative<protocol::ParsedCommand>(result)) {
       const auto& parsed = std::get<protocol::ParsedCommand>(result);
-      std::string response = handler_(parsed.command);
       connection.input().consume(parsed.consumed_bytes);
-      if (!connection.output().append(response)) {
-        return false;  // output backpressure: cap exceeded (SPEC.md section 5)
+      const std::uint64_t sequence = connection.sequencer().next_request_sequence();
+
+      worker::WorkItem item{.connection_id = connection.id(),
+                            .connection_generation = connection.generation(),
+                            .sequence = sequence,
+                            .command = parsed.command};
+      const worker::PushStatus push_status = work_queue_.try_push(item);
+      if (push_status == worker::PushStatus::kOk) {
+        continue;  // dispatched; keep draining pipelined frames
       }
-      continue;  // keep draining pipelined frames from this same read
+
+      // The work queue is full (or closed for shutdown): reply
+      // immediately instead of dispatching -- the documented alternative
+      // backpressure strategy in ARCHITECTURE.md section 4. Goes through
+      // the same sequencer as real completions so ordering is preserved
+      // regardless of which path a given response took.
+      const std::string busy_response = push_status == worker::PushStatus::kClosed
+                                            ? protocol::encode_error("ERR server shutting down")
+                                            : protocol::encode_error("ERR server busy, try again");
+      if (!push_responses(connection, connection.sequencer().record(sequence, busy_response))) {
+        return false;
+      }
+      continue;
     }
 
     const auto& error = std::get<protocol::ProtocolError>(result);
     if (error.recoverable) {
       connection.input().consume(error.consumed_bytes);
-      if (!connection.output().append(protocol::encode_error(error.message))) {
+      const std::uint64_t sequence = connection.sequencer().next_request_sequence();
+      if (!push_responses(connection, connection.sequencer().record(
+                                          sequence, protocol::encode_error(error.message)))) {
         return false;
       }
       continue;
     }
     // Framing itself is broken; cannot safely resynchronize. Best-effort
-    // error reply, then the caller closes the connection.
-    (void)connection.output().append(protocol::encode_error(error.message));
+    // error reply (still sequenced, so it lands after any earlier
+    // still-pending responses), then the caller closes the connection.
+    const std::uint64_t sequence = connection.sequencer().next_request_sequence();
+    (void)push_responses(
+        connection, connection.sequencer().record(sequence, protocol::encode_error(error.message)));
     return false;
   }
 }
@@ -223,6 +283,43 @@ void EventLoop::handle_connection_writable(ConnectionId id) {
   }
 
   update_epoll_interest(*connection);
+}
+
+void EventLoop::drain_completions() {
+  for (;;) {
+    std::optional<worker::Completion> completion = completion_queue_.try_pop();
+    if (!completion.has_value()) {
+      return;
+    }
+
+    // Strict (id, generation) check: unlike the event loop's own
+    // epoll-driven dispatch, this completion crossed threads and may
+    // refer to a connection that has since closed -- possibly with its fd
+    // already reused for an unrelated client (ARCHITECTURE.md, Data
+    // Ownership).
+    Connection* connection =
+        connections_.find(completion->connection_id, completion->connection_generation);
+    if (connection == nullptr) {
+      continue;  // stale; discard
+    }
+
+    std::vector<std::string> ready =
+        connection->sequencer().record(completion->sequence, std::move(completion->response));
+    if (!push_responses(*connection, std::move(ready))) {
+      close_connection(completion->connection_id, completion->connection_generation);
+      continue;
+    }
+
+    // A response was just released, which may have freed in-flight
+    // capacity; retry parsing anything left buffered from this
+    // connection that process_input previously deferred.
+    if (!process_input(*connection)) {
+      close_connection(completion->connection_id, completion->connection_generation);
+      continue;
+    }
+
+    handle_connection_writable(completion->connection_id);
+  }
 }
 
 void EventLoop::close_connection(ConnectionId id, ConnectionGeneration generation) {

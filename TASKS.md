@@ -49,12 +49,12 @@ documentation. Check an item only after verifying it.
 
 ## Milestone 5 — Worker Pool and Dispatch
 
-- [ ] Implement bounded blocking work and completion queues.
-- [ ] Implement fixed-size `std::jthread` pool.
-- [ ] Dispatch all seven commands to storage.
-- [ ] Preserve response order per connection.
-- [ ] Apply input/output backpressure and in-flight limits.
-- [ ] Test queue closure and out-of-order worker completion.
+- [x] Implement bounded blocking work and completion queues.
+- [x] Implement fixed-size `std::jthread` pool.
+- [x] Dispatch all seven commands to storage.
+- [x] Preserve response order per connection.
+- [x] Apply input/output backpressure and in-flight limits.
+- [x] Test queue closure and out-of-order worker completion.
 
 ## Milestone 6 — Active TTL Expiration
 
