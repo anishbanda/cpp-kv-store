@@ -32,6 +32,15 @@ class ConnectionRegistry {
 
   [[nodiscard]] Connection* find(ConnectionId id, ConnectionGeneration generation) noexcept;
 
+  // Looks up whatever connection currently occupies `id`, ignoring
+  // generation. Safe only for the event loop's own epoll-driven dispatch:
+  // an epoll event for fd `id` can only refer to whatever this registry
+  // currently has registered at that fd, since both are added and removed
+  // together on the same (single) thread -- there is no stale-generation
+  // hazard to guard against here, unlike a cross-thread work item's (id,
+  // generation) pair (see ARCHITECTURE.md, Data Ownership).
+  [[nodiscard]] Connection* find_current(ConnectionId id) noexcept;
+
   [[nodiscard]] std::size_t size() const noexcept { return connections_.size(); }
 
  private:

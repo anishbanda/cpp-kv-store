@@ -35,4 +35,9 @@ Connection* ConnectionRegistry::find(ConnectionId id, ConnectionGeneration gener
   return &it->second;
 }
 
+Connection* ConnectionRegistry::find_current(ConnectionId id) noexcept {
+  const auto it = connections_.find(id);
+  return it == connections_.end() ? nullptr : &it->second;
+}
+
 }  // namespace kvstore::net

@@ -36,6 +36,7 @@ add_library(kvstore_core STATIC
   src/net/connection_registry.cpp
   src/net/io.cpp
   src/net/listener.cpp
+  src/net/event_loop.cpp
 )
 
 target_include_directories(kvstore_core
@@ -68,6 +69,7 @@ if(KVSTORE_BUILD_TESTS)
     tests/net/io_test.cpp
     tests/net/connection_registry_test.cpp
     tests/net/listener_test.cpp
+    tests/net/event_loop_test.cpp
   )
   target_link_libraries(kvstore_tests PRIVATE kvstore_core GTest::gtest_main)
   kvstore_set_project_warnings(kvstore_tests)

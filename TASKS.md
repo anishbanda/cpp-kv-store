@@ -41,11 +41,11 @@ documentation. Check an item only after verifying it.
 
 ## Milestone 4 — `epoll` Event Loop
 
-- [ ] Implement edge- or level-triggered behavior with one documented choice.
-- [ ] Handle partial reads/writes and `EAGAIN` correctly.
-- [ ] Parse multiple commands per read.
-- [ ] Add event-loop wakeup for completions and shutdown.
-- [ ] Test fragmented and pipelined requests.
+- [x] Implement edge- or level-triggered behavior with one documented choice.
+- [x] Handle partial reads/writes and `EAGAIN` correctly.
+- [x] Parse multiple commands per read.
+- [x] Add event-loop wakeup for completions and shutdown.
+- [x] Test fragmented and pipelined requests.
 
 ## Milestone 5 — Worker Pool and Dispatch
 
