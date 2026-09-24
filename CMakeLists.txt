@@ -41,6 +41,8 @@ add_library(kvstore_core STATIC
   src/net/response_sequencer.cpp
   src/command/dispatcher.cpp
   src/worker/worker_pool.cpp
+  src/util/logger.cpp
+  src/cli/options.cpp
 )
 
 target_include_directories(kvstore_core
@@ -82,6 +84,8 @@ if(KVSTORE_BUILD_TESTS)
     tests/reliability/thousand_connections_test.cpp
     tests/reliability/randomized_concurrency_test.cpp
     tests/reliability/graceful_shutdown_test.cpp
+    tests/util/logger_test.cpp
+    tests/cli/options_test.cpp
   )
   target_link_libraries(kvstore_tests PRIVATE kvstore_core GTest::gtest_main)
   kvstore_set_project_warnings(kvstore_tests)

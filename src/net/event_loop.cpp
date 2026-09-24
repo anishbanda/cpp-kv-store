@@ -150,6 +150,10 @@ void EventLoop::handle_listener_readable() {
     if (::epoll_ctl(epoll_fd_.get(), EPOLL_CTL_ADD, client_fd, &event) != 0) {
       // Could not register with epoll; drop this connection but keep
       // accepting others rather than taking down the listener.
+      if (config_.logger != nullptr) {
+        config_.logger->warn(
+            "resource limit: epoll_ctl(ADD) failed for a new connection, dropping it");
+      }
       connections_.close(connection.id(), connection.generation());
     }
   }
@@ -175,6 +179,10 @@ void EventLoop::handle_connection_readable(ConnectionId id) {
     if (outcome.status == ReadStatus::kWouldBlock) {
       break;
     }
+    if (outcome.status == ReadStatus::kBufferFull && config_.logger != nullptr) {
+      config_.logger->warn(
+          "resource limit: connection input buffer cap exceeded, closing connection");
+    }
     // kClosed, kBufferFull, or kError all mean this connection cannot
     // continue.
     close_connection(id, generation);
@@ -192,6 +200,10 @@ void EventLoop::handle_connection_readable(ConnectionId id) {
 bool EventLoop::push_responses(Connection& connection, std::vector<std::string> ready) {
   for (std::string& response : ready) {
     if (!connection.output().append(response)) {
+      if (config_.logger != nullptr) {
+        config_.logger->warn(
+            "resource limit: connection output buffer cap exceeded, closing connection");
+      }
       return false;  // output backpressure: cap exceeded (SPEC.md section 5)
     }
   }
@@ -237,6 +249,9 @@ bool EventLoop::process_input(Connection& connection) {
       const std::string busy_response = push_status == worker::PushStatus::kClosed
                                             ? protocol::encode_error("ERR server shutting down")
                                             : protocol::encode_error("ERR server busy, try again");
+      if (push_status == worker::PushStatus::kFull && config_.logger != nullptr) {
+        config_.logger->warn("resource limit: work queue full, replying busy");
+      }
       if (!push_responses(connection, connection.sequencer().record(sequence, busy_response))) {
         return false;
       }
@@ -256,6 +271,9 @@ bool EventLoop::process_input(Connection& connection) {
     // Framing itself is broken; cannot safely resynchronize. Best-effort
     // error reply (still sequenced, so it lands after any earlier
     // still-pending responses), then the caller closes the connection.
+    if (config_.logger != nullptr) {
+      config_.logger->warn("malformed request: closing connection");
+    }
     const std::uint64_t sequence = connection.sequencer().next_request_sequence();
     (void)push_responses(
         connection, connection.sequencer().record(sequence, protocol::encode_error(error.message)));

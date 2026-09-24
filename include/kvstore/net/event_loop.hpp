@@ -8,6 +8,7 @@
 #include "kvstore/net/connection_registry.hpp"
 #include "kvstore/net/file_descriptor.hpp"
 #include "kvstore/net/listener.hpp"
+#include "kvstore/util/logger.hpp"
 #include "kvstore/worker/bounded_queue.hpp"
 #include "kvstore/worker/work_item.hpp"
 
@@ -28,6 +29,14 @@ struct EventLoopConfig {
   // which instead uses that section's other documented strategy, an
   // immediate busy reply.
   std::size_t max_in_flight_per_connection = 64;
+
+  // Optional; nullptr means no logging. When set, the event loop logs the
+  // SPEC.md section 8 events that occur on its own thread: malformed
+  // (non-recoverable) requests and resource-limit failures (a full work
+  // queue, or a connection's input/output buffer cap exceeded). Never
+  // logs client payload contents, only event metadata. Must outlive this
+  // EventLoop.
+  util::Logger* logger = nullptr;
 };
 
 // A single-threaded, level-triggered epoll reactor.
